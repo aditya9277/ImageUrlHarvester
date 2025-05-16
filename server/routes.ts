@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { scrapeImages } from "./scraper";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated } from "./auth";
 
 // Schema for image scraping requests
 const scrapeRequestSchema = z.object({
@@ -18,19 +18,18 @@ const scrapeRequestSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Set up authentication
-  await setupAuth(app);
+  // Set up authentication with database
+  setupAuth(app);
   
-  // Auth routes
-  app.get('/api/auth/user', async (req: any, res) => {
+  // Auth route to get current user
+  app.get('/api/user', (req: any, res) => {
     if (!req.isAuthenticated()) {
       return res.json(null);
     }
     
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      // User is already attached to the request by Passport
+      res.json(req.user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -58,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save scrape history if user is authenticated
       if (req.isAuthenticated()) {
         try {
-          const userId = (req.user as any).claims.sub;
+          const userId = req.user.id.toString();
           
           // Create scrape history entry
           const scrapeHistory = await storage.createScrapeHistory({
@@ -90,7 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's scrape history
   app.get("/api/history", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id.toString();
       const history = await storage.getScrapeHistory(userId);
       res.json({ history });
     } catch (error) {
@@ -102,7 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get images for a specific scrape
   app.get("/api/history/:id/images", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id.toString();
       const scrapeId = parseInt(req.params.id, 10);
       
       if (isNaN(scrapeId)) {
@@ -110,8 +109,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Verify the scrape belongs to the user
-      const [scrape] = await storage.getScrapeHistory(userId, 1);
-      if (!scrape || scrape.id !== scrapeId) {
+      const scrapeHistory = await storage.getScrapeHistory(userId);
+      const userScrape = scrapeHistory.find(scrape => scrape.id === scrapeId);
+      
+      if (!userScrape) {
         return res.status(403).json({ message: "Not authorized to view this scrape" });
       }
       

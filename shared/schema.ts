@@ -12,9 +12,10 @@ export const sessions = pgTable("sessions", {
 
 // Enhanced user model for authentication
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey(),
-  email: varchar("email").unique(),
+  id: serial("id").primaryKey(),
+  email: varchar("email").unique().notNull(),
   username: text("username").unique(),
+  password: text("password").notNull(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
