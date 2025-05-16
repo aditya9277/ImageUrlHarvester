@@ -57,11 +57,6 @@ export default function LandingPage() {
                 Try It Now <ArrowRightIcon className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/auth">
-              <Button size="lg" variant="outline" className="rounded-full px-8 text-lg h-12 border-blue-300 text-blue-700 hover:bg-blue-50">
-                Create Account
-              </Button>
-            </Link>
           </div>
           
           {/* Stats */}
