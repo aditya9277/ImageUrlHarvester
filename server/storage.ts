@@ -1,25 +1,23 @@
-import { 
-  users, 
-  scrapeHistory, 
+import {
+  users,
+  scrapeHistory,
   images,
-  type User, 
-  type UpsertUser,
+  type User,
   type ScrapeHistory,
-  type InsertScrapeHistory,
   type Image,
-  type InsertImage,
-  type ImageData
+  type InsertScrapeHistory,
+  type ImageData,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
-import crypto from "crypto";
+import { eq, desc } from "drizzle-orm";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
 
 export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  createUser(userData: { email: string, password: string, firstName?: string, lastName?: string }): Promise<User>;
+  createUser(userData: { email: string, password: string, firstName?: string | null, lastName?: string | null }): Promise<User>;
   
   // Scrape history operations
   getScrapeHistory(userId: string, limit?: number): Promise<ScrapeHistory[]>;
@@ -29,121 +27,128 @@ export interface IStorage {
   getImagesForScrape(scrapeId: number): Promise<Image[]>;
   saveImages(scrapeId: number, images: ImageData[]): Promise<Image[]>;
   getImageByHash(hash: string): Promise<Image | undefined>;
+  
+  // Session store
+  sessionStore: session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
+  
+  constructor() {
+    const PostgresSessionStore = connectPg(session);
+    this.sessionStore = new PostgresSessionStore({
+      conObject: {
+        connectionString: process.env.DATABASE_URL,
+      },
+      createTableIfMissing: true,
+    });
+  }
+  
   // User operations
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, parseInt(id)));
+      return user;
+    } catch (error) {
+      console.error("Error getting user:", error);
+      return undefined;
+    }
   }
-
+  
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      console.error("Error getting user by email:", error);
+      return undefined;
+    }
   }
-
-  async createUser(userData: { email: string, password: string, firstName?: string, lastName?: string }): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values({
+  
+  async createUser(userData: { email: string, password: string, firstName?: string | null, lastName?: string | null }): Promise<User> {
+    try {
+      const [user] = await db.insert(users).values({
         email: userData.email,
         password: userData.password,
         firstName: userData.firstName || null,
         lastName: userData.lastName || null,
-      })
-      .returning();
-    return user;
+      }).returning();
+      
+      return user;
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw new Error("Error creating user");
+    }
   }
-
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
-
+  
   // Scrape history operations
   async getScrapeHistory(userId: string, limit: number = 10): Promise<ScrapeHistory[]> {
-    return db
-      .select()
-      .from(scrapeHistory)
-      .where(eq(scrapeHistory.userId, userId))
-      .orderBy(desc(scrapeHistory.createdAt))
-      .limit(limit);
+    try {
+      return await db.select()
+        .from(scrapeHistory)
+        .where(eq(scrapeHistory.userId, userId))
+        .orderBy(desc(scrapeHistory.createdAt))
+        .limit(limit);
+    } catch (error) {
+      console.error("Error getting scrape history:", error);
+      return [];
+    }
   }
-
+  
   async createScrapeHistory(data: InsertScrapeHistory): Promise<ScrapeHistory> {
-    const [result] = await db
-      .insert(scrapeHistory)
-      .values(data)
-      .returning();
-    return result;
+    try {
+      const [history] = await db.insert(scrapeHistory).values(data).returning();
+      return history;
+    } catch (error) {
+      console.error("Error creating scrape history:", error);
+      throw new Error("Error creating scrape history");
+    }
   }
-
+  
   // Image operations
   async getImagesForScrape(scrapeId: number): Promise<Image[]> {
-    return db
-      .select()
-      .from(images)
-      .where(eq(images.scrapeId, scrapeId));
+    try {
+      return await db.select()
+        .from(images)
+        .where(eq(images.scrapeId, scrapeId));
+    } catch (error) {
+      console.error("Error getting images for scrape:", error);
+      return [];
+    }
   }
-
+  
   async saveImages(scrapeId: number, imagesList: ImageData[]): Promise<Image[]> {
-    // Generate hashes for images if missing
-    const imagesWithHashes = imagesList.map(img => {
-      if (!img.hash) {
-        const hash = crypto.createHash("md5").update(img.url).digest("hex");
-        return { ...img, hash };
-      }
-      return img;
-    });
-
-    // Insert all images
-    const insertedImages = await Promise.all(
-      imagesWithHashes.map(async (img) => {
-        // Check if image is already cached
-        let cached = false;
-        if (img.hash) {
-          const existingImage = await this.getImageByHash(img.hash);
-          cached = !!existingImage;
-        }
-
-        const [result] = await db
-          .insert(images)
-          .values({
-            scrapeId,
-            url: img.url,
-            sourceUrl: img.sourceUrl,
-            alt: img.alt,
-            width: img.width,
-            height: img.height,
-            fileSize: img.fileSize,
-            hash: img.hash,
-            cached
-          })
-          .returning();
-        return result;
-      })
-    );
-
-    return insertedImages;
+    try {
+      if (!imagesList.length) return [];
+      
+      const imagesToInsert = imagesList.map(img => ({
+        scrapeId,
+        url: img.url,
+        sourceUrl: img.sourceUrl,
+        width: img.width || null,
+        height: img.height || null,
+        alt: img.alt || null,
+        fileSize: img.fileSize || null,
+        hash: img.hash || null,
+        cached: img.cached || false,
+      }));
+      
+      return await db.insert(images).values(imagesToInsert).returning();
+    } catch (error) {
+      console.error("Error saving images:", error);
+      throw new Error("Error saving images");
+    }
   }
-
+  
   async getImageByHash(hash: string): Promise<Image | undefined> {
-    const [image] = await db
-      .select()
-      .from(images)
-      .where(eq(images.hash, hash));
-    return image;
+    try {
+      const [image] = await db.select().from(images).where(eq(images.hash, hash));
+      return image;
+    } catch (error) {
+      console.error("Error getting image by hash:", error);
+      return undefined;
+    }
   }
 }
 

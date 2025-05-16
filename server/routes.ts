@@ -1,126 +1,86 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { z } from "zod";
-import { scrapeImages } from "./scraper";
-import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./auth";
-
-// Schema for image scraping requests
-const scrapeRequestSchema = z.object({
-  urls: z.array(z.string().url()),
-  options: z.object({
-    deduplicateImages: z.boolean().default(true),
-    filterSmallImages: z.boolean().default(true)
-  }).default({
-    deduplicateImages: true,
-    filterSmallImages: true
-  })
-});
+import { storage } from "./storage";
+import { scrapeImages } from "./scraper";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Set up authentication with database
+  // Set up authentication
   setupAuth(app);
   
-  // Auth route to get current user
-  app.get('/api/user', (req: any, res) => {
-    if (!req.isAuthenticated()) {
-      return res.json(null);
-    }
-    
-    try {
-      // User is already attached to the request by Passport
-      res.json(req.user);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
+  // Debug endpoint to check if auth is working
+  app.get("/api/auth-check", (req, res) => {
+    res.json({
+      authenticated: req.isAuthenticated(),
+      user: req.user || null,
+      session: req.session ? true : false
+    });
   });
-
-  // API route for scraping images (works without authentication)
+  
+  // API routes
+  
+  // Scrape images endpoint
   app.post("/api/scrape", async (req, res) => {
     try {
-      // Validate request body
-      const validationResult = scrapeRequestSchema.safeParse(req.body);
+      const { urls, options } = req.body;
       
-      if (!validationResult.success) {
-        return res.status(400).json({ 
-          message: "Invalid request data", 
-          errors: validationResult.error.format() 
-        });
+      if (!urls || !Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json({ message: "No URLs provided" });
       }
-      
-      const { urls, options } = validationResult.data;
       
       // Scrape images from the provided URLs
       const images = await scrapeImages(urls, options);
       
-      // Save scrape history if user is authenticated
-      if (req.isAuthenticated()) {
-        try {
-          const userId = req.user.id.toString();
-          
-          // Create scrape history entry
-          const scrapeHistory = await storage.createScrapeHistory({
-            userId,
-            urls: urls.join(", "),
-            imageCount: images.length
-          });
-          
-          // Save images to database
-          await storage.saveImages(scrapeHistory.id, images);
-        } catch (error) {
-          console.error("Failed to save scrape history:", error);
-          // Continue anyway as this is an enhancement
+      // If user is authenticated, save the scrape to history
+      if (req.isAuthenticated() && req.user) {
+        const urlString = Array.isArray(urls) ? urls.join(", ") : urls;
+        const userId = req.user.id.toString();
+        
+        const scrapeRecord = await storage.createScrapeHistory({
+          userId,
+          urls: urlString,
+          imageCount: images.length,
+        });
+        
+        // Save images to database
+        if (scrapeRecord && images.length > 0) {
+          await storage.saveImages(scrapeRecord.id, images);
         }
       }
       
-      // Return the scraped images
-      return res.json({ images });
+      res.json({ images });
     } catch (error) {
       console.error("Error scraping images:", error);
-      return res.status(500).json({ 
-        message: error instanceof Error ? error.message : "Failed to scrape images" 
+      res.status(500).json({ 
+        message: "Error scraping images", 
+        error: error instanceof Error ? error.message : String(error) 
       });
     }
   });
   
-  // Protected routes (require authentication)
-  
-  // Get user's scrape history
-  app.get("/api/history", isAuthenticated, async (req: any, res) => {
+  // Get scrape history (protected route)
+  app.get("/api/history", isAuthenticated, async (req, res) => {
     try {
       const userId = req.user.id.toString();
       const history = await storage.getScrapeHistory(userId);
+      
       res.json({ history });
     } catch (error) {
-      console.error("Error fetching scrape history:", error);
-      res.status(500).json({ message: "Failed to fetch scrape history" });
+      console.error("Error fetching history:", error);
+      res.status(500).json({ message: "Error fetching history" });
     }
   });
   
-  // Get images for a specific scrape
-  app.get("/api/history/:id/images", isAuthenticated, async (req: any, res) => {
+  // Get images for a specific scrape (protected route)
+  app.get("/api/history/:id/images", isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.id.toString();
-      const scrapeId = parseInt(req.params.id, 10);
-      
-      if (isNaN(scrapeId)) {
-        return res.status(400).json({ message: "Invalid scrape ID" });
-      }
-      
-      // Verify the scrape belongs to the user
-      const scrapeHistory = await storage.getScrapeHistory(userId);
-      const userScrape = scrapeHistory.find(scrape => scrape.id === scrapeId);
-      
-      if (!userScrape) {
-        return res.status(403).json({ message: "Not authorized to view this scrape" });
-      }
-      
+      const scrapeId = parseInt(req.params.id);
       const images = await storage.getImagesForScrape(scrapeId);
+      
       res.json({ images });
     } catch (error) {
-      console.error("Error fetching scrape images:", error);
-      res.status(500).json({ message: "Failed to fetch scrape images" });
+      console.error("Error fetching images:", error);
+      res.status(500).json({ message: "Error fetching images" });
     }
   });
 
