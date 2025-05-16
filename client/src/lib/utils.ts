@@ -7,7 +7,16 @@ export function cn(...inputs: ClassValue[]) {
 
 export function isValidUrl(urlString: string): boolean {
   try {
-    new URL(urlString);
+    const url = new URL(urlString);
+    // Check if the protocol is HTTP or HTTPS
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return false;
+    }
+    // Check if the URL has a valid domain (at least two parts in the hostname)
+    const hostnameParts = url.hostname.split('.');
+    if (hostnameParts.length < 2 || !url.hostname.includes('.')) {
+      return false;
+    }
     return true;
   } catch (err) {
     return false;

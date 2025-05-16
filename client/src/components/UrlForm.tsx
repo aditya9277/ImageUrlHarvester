@@ -101,11 +101,15 @@ export function UrlForm({ onScrapeStart, onScrapeComplete, onScrapeError }: UrlF
               <Checkbox 
                 id="deduplicateImages" 
                 checked={options.deduplicateImages}
-                onCheckedChange={(checked) => 
-                  setOptions(prev => ({ ...prev, deduplicateImages: checked === true }))
-                }
+                onCheckedChange={(checked) => {
+                  setOptions(prev => ({ ...prev, deduplicateImages: checked === true }));
+                }}
               />
-              <Label htmlFor="deduplicateImages" className="text-sm text-gray-700">
+              <Label 
+                htmlFor="deduplicateImages" 
+                className="text-sm text-gray-700 cursor-pointer"
+                onClick={() => setOptions(prev => ({ ...prev, deduplicateImages: !prev.deduplicateImages }))}
+              >
                 Remove duplicates
               </Label>
             </div>
@@ -113,11 +117,15 @@ export function UrlForm({ onScrapeStart, onScrapeComplete, onScrapeError }: UrlF
               <Checkbox 
                 id="filterSmallImages" 
                 checked={options.filterSmallImages}
-                onCheckedChange={(checked) => 
-                  setOptions(prev => ({ ...prev, filterSmallImages: checked === true }))
-                }
+                onCheckedChange={(checked) => {
+                  setOptions(prev => ({ ...prev, filterSmallImages: checked === true }));
+                }}
               />
-              <Label htmlFor="filterSmallImages" className="text-sm text-gray-700">
+              <Label 
+                htmlFor="filterSmallImages" 
+                className="text-sm text-gray-700 cursor-pointer"
+                onClick={() => setOptions(prev => ({ ...prev, filterSmallImages: !prev.filterSmallImages }))}
+              >
                 Filter small images
               </Label>
             </div>
