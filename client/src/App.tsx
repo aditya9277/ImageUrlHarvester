@@ -31,7 +31,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
+        <AuthProvider queryClient={queryClient}>
           <NotificationProvider>
             <Toaster />
             <Router />

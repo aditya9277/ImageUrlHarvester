@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, isAuthenticated } from "./memory-auth";
+import { setupAuth, isAuthenticated } from "./memory-auth.js";
 import { scrapeImages as fetchImagesFromUrls } from "./scraper";
 
 // Simple in-memory storage for history
