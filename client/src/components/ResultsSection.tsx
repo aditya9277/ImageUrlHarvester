@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ImageCard, ImageData } from "./ImageCard";
-import { DownloadIcon, TrashIcon, ChevronLeftIcon, ChevronRightIcon, FilterIcon, LayersIcon } from "lucide-react";
+import { DownloadIcon, TrashIcon, FilterIcon, LayersIcon } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { 
@@ -11,18 +11,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import JSZip from "jszip";
+
+// Add declaration for file-saver
+declare module 'file-saver';
 import { saveAs } from "file-saver";
 
 interface ResultsSectionProps {
@@ -93,71 +87,7 @@ export function ResultsSection({ images, onClear }: ResultsSectionProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   
-  // Generate pagination links
-  const generatePaginationLinks = () => {
-    const links = [];
-    
-    // Always show first page
-    links.push(
-      <PaginationItem key="first">
-        <PaginationLink 
-          onClick={() => handlePageChange(1)} 
-          isActive={currentPage === 1}
-        >
-          1
-        </PaginationLink>
-      </PaginationItem>
-    );
-    
-    // Add ellipsis if needed
-    if (currentPage > 3) {
-      links.push(
-        <PaginationItem key="ellipsis1">
-          <PaginationEllipsis />
-        </PaginationItem>
-      );
-    }
-    
-    // Add pages around current page
-    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
-      if (i === 1 || i === totalPages) continue; // Skip first and last pages as they're always shown
-      links.push(
-        <PaginationItem key={i}>
-          <PaginationLink 
-            onClick={() => handlePageChange(i)} 
-            isActive={currentPage === i}
-          >
-            {i}
-          </PaginationLink>
-        </PaginationItem>
-      );
-    }
-    
-    // Add ellipsis if needed
-    if (currentPage < totalPages - 2) {
-      links.push(
-        <PaginationItem key="ellipsis2">
-          <PaginationEllipsis />
-        </PaginationItem>
-      );
-    }
-    
-    // Always show last page if there are more than 1 pages
-    if (totalPages > 1) {
-      links.push(
-        <PaginationItem key="last">
-          <PaginationLink 
-            onClick={() => handlePageChange(totalPages)} 
-            isActive={currentPage === totalPages}
-          >
-            {totalPages}
-          </PaginationLink>
-        </PaginationItem>
-      );
-    }
-    
-    return links;
-  };
+  // No longer needed as we now use custom pagination
   
   const downloadAllImages = async () => {
     const zip = new JSZip();
@@ -332,27 +262,122 @@ export function ResultsSection({ images, onClear }: ResultsSectionProps) {
                 images
               </div>
               
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious 
-                      onClick={() => handlePageChange(currentPage - 1)} 
-                      isActive={false}
-                      disabled={currentPage === 1}
-                    />
-                  </PaginationItem>
+              <div className="flex justify-center">
+                <nav className="flex items-center space-x-2">
+                  <button
+                    onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`flex items-center justify-center rounded-md p-2 text-sm ${
+                      currentPage === 1 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="sr-only">Previous</span>
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
+                    </svg>
+                  </button>
                   
-                  {generatePaginationLinks()}
+                  {/* First page */}
+                  <button
+                    onClick={() => handlePageChange(1)}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                      currentPage === 1 ? 'bg-primary text-primary-foreground' : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    1
+                  </button>
                   
-                  <PaginationItem>
-                    <PaginationNext 
-                      onClick={() => handlePageChange(currentPage + 1)} 
-                      isActive={false}
-                      disabled={currentPage === totalPages}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+                  {/* Ellipsis if needed */}
+                  {currentPage > 3 && (
+                    <span className="flex h-8 w-8 items-center justify-center">
+                      ...
+                    </span>
+                  )}
+                  
+                  {/* Pages around current */}
+                  {Array.from({length: totalPages}).map((_, i) => {
+                    const pageNumber = i + 1;
+                    // Skip first and last page as they're always shown
+                    if (pageNumber === 1 || pageNumber === totalPages) return null;
+                    // Show pages around current page
+                    if (
+                      pageNumber >= Math.max(2, currentPage - 1) && 
+                      pageNumber <= Math.min(totalPages - 1, currentPage + 1)
+                    ) {
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => handlePageChange(pageNumber)}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                            currentPage === pageNumber ? 'bg-primary text-primary-foreground' : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+                  
+                  {/* Ellipsis if needed */}
+                  {currentPage < totalPages - 2 && (
+                    <span className="flex h-8 w-8 items-center justify-center">
+                      ...
+                    </span>
+                  )}
+                  
+                  {/* Last page if more than 1 page */}
+                  {totalPages > 1 && (
+                    <button
+                      onClick={() => handlePageChange(totalPages)}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm ${
+                        currentPage === totalPages ? 'bg-primary text-primary-foreground' : 'hover:bg-gray-100'
+                      }`}
+                    >
+                      {totalPages}
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`flex items-center justify-center rounded-md p-2 text-sm ${
+                      currentPage === totalPages 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="sr-only">Next</span>
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
             </div>
           )}
         </TabsContent>
