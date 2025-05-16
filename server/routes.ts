@@ -1,18 +1,21 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, isAuthenticated } from "./auth";
-import { storage } from "./storage";
-import { scrapeImages } from "./scraper";
+import { setupAuth, isAuthenticated } from "./memory-auth";
+import { scrapeImages as fetchImagesFromUrls } from "./scraper";
+
+// Simple in-memory storage for history
+const scrapeHistory: any[] = [];
+const scrapeImagesStorage: any[] = [];
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Set up authentication
+  // Set up authentication using memory-based auth
   setupAuth(app);
   
   // Debug endpoint to check if auth is working
   app.get("/api/auth-check", (req, res) => {
     res.json({
-      authenticated: req.isAuthenticated(),
-      user: req.user || null,
+      authenticated: !!req.session.user,
+      user: req.session.user || null,
       session: req.session ? true : false
     });
   });
@@ -29,22 +32,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Scrape images from the provided URLs
-      const images = await scrapeImages(urls, options);
+      const images = await fetchImagesFromUrls(urls, options);
       
       // If user is authenticated, save the scrape to history
-      if (req.isAuthenticated() && req.user) {
+      if (req.session.user) {
         const urlString = Array.isArray(urls) ? urls.join(", ") : urls;
-        const userId = req.user.id.toString();
+        const userId = req.session.user.id;
         
-        const scrapeRecord = await storage.createScrapeHistory({
+        // Create scrape history record
+        const scrapeRecord = {
+          id: scrapeHistory.length + 1,
           userId,
           urls: urlString,
           imageCount: images.length,
-        });
+          createdAt: new Date()
+        };
         
-        // Save images to database
-        if (scrapeRecord && images.length > 0) {
-          await storage.saveImages(scrapeRecord.id, images);
+        scrapeHistory.push(scrapeRecord);
+        
+        // Save images to memory
+        if (images.length > 0) {
+          const imagesWithScrapeId = images.map((img: any) => ({
+            ...img,
+            scrapeId: scrapeRecord.id
+          }));
+          scrapeImagesStorage.push(...imagesWithScrapeId);
         }
       }
       
@@ -59,10 +71,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get scrape history (protected route)
-  app.get("/api/history", isAuthenticated, async (req, res) => {
+  app.get("/api/history", isAuthenticated, (req, res) => {
     try {
-      const userId = req.user.id.toString();
-      const history = await storage.getScrapeHistory(userId);
+      const userId = req.session.user.id;
+      const history = scrapeHistory.filter(item => item.userId === userId);
       
       res.json({ history });
     } catch (error) {
@@ -72,10 +84,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get images for a specific scrape (protected route)
-  app.get("/api/history/:id/images", isAuthenticated, async (req, res) => {
+  app.get("/api/history/:id/images", isAuthenticated, (req, res) => {
     try {
       const scrapeId = parseInt(req.params.id);
-      const images = await storage.getImagesForScrape(scrapeId);
+      const images = scrapeImagesStorage.filter(img => img.scrapeId === scrapeId);
       
       res.json({ images });
     } catch (error) {

@@ -1,14 +1,27 @@
-import { createContext, ReactNode, useContext } from "react";
-import {
-  useQuery,
-  useMutation,
-  UseMutationResult,
-} from "@tanstack/react-query";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { ReactNode, createContext, useContext } from "react";
+import { useQuery, useMutation, QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import { useToast } from "@/hooks/use-toast";
 
-// Define user type
+// Schema for login form
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+// Schema for registration form
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().optional(),
+  confirmPassword: z.string().min(6, "Confirm password is required"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+// Types for the auth context
 interface User {
   id: number;
   email: string;
@@ -18,24 +31,6 @@ interface User {
   username: string | null;
 }
 
-// Create login data schema
-const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
-// Create register data schema
-const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().optional(),
-  confirmPassword: z.string(),
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
-});
-
 type LoginData = z.infer<typeof loginSchema>;
 type RegisterData = z.infer<typeof registerSchema>;
 
@@ -44,35 +39,40 @@ type AuthContextType = {
   isLoading: boolean;
   error: Error | null;
   isAuthenticated: boolean;
-  loginMutation: UseMutationResult<User, Error, LoginData>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<User, Error, RegisterData>;
+  loginMutation: ReturnType<typeof useLoginMutation>;
+  logoutMutation: ReturnType<typeof useLogoutMutation>;
+  registerMutation: ReturnType<typeof useRegisterMutation>;
 };
 
+// Create the context
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+// Custom hook for login mutation
+function useLoginMutation(queryClient: QueryClient) {
   const { toast } = useToast();
   
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<User | null, Error>({
-    queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
-
-  const loginMutation = useMutation({
+  return useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Login failed");
+      }
+      
+      return response.json();
     },
-    onSuccess: (user: User) => {
+    onSuccess: (user) => {
       queryClient.setQueryData(["/api/user"], user);
       toast({
-        title: "Logged in successfully",
-        description: `Welcome back, ${user.firstName || 'User'}!`,
+        title: "Login successful",
+        description: "Welcome back!",
       });
     },
     onError: (error: Error) => {
@@ -83,18 +83,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+}
 
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: RegisterData) => {
-      const { confirmPassword, ...userData } = credentials;
-      const res = await apiRequest("POST", "/api/register", userData);
-      return await res.json();
+// Custom hook for registration mutation
+function useRegisterMutation(queryClient: QueryClient) {
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (userData: RegisterData) => {
+      const response = await fetch("/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(userData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Registration failed");
+      }
+      
+      return response.json();
     },
-    onSuccess: (user: User) => {
+    onSuccess: (user) => {
       queryClient.setQueryData(["/api/user"], user);
       toast({
-        title: "Registration successful",
-        description: `Welcome to ImageScraper, ${user.firstName || 'User'}!`,
+        title: "Account created",
+        description: "Your account has been created successfully!",
       });
     },
     onError: (error: Error) => {
@@ -105,16 +121,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+}
 
-  const logoutMutation = useMutation({
+// Custom hook for logout mutation
+function useLogoutMutation(queryClient: QueryClient) {
+  const { toast } = useToast();
+  
+  return useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      const response = await fetch("/api/logout", {
+        method: "POST",
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Logout failed");
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
       toast({
-        title: "Logged out successfully",
-        description: "You have been logged out of your account.",
+        title: "Logged out",
+        description: "You have been logged out successfully.",
       });
     },
     onError: (error: Error) => {
@@ -125,19 +153,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+}
 
-  // Create the context value object
+// AuthProvider component
+export function AuthProvider({ children, queryClient }: { children: ReactNode, queryClient: QueryClient }) {
+  const { toast } = useToast();
+  
+  // Query to get the current user
+  const {
+    data: user,
+    error,
+    isLoading,
+  } = useQuery<User | null>({
+    queryKey: ["/api/user"],
+    queryFn: async () => {
+      try {
+        const response = await fetch("/api/user");
+        if (!response.ok) {
+          if (response.status === 401) {
+            return null;
+          }
+          throw new Error("Failed to fetch user");
+        }
+        return response.json();
+      } catch (err) {
+        console.error("Error fetching user:", err);
+        return null;
+      }
+    },
+    retry: false,
+  });
+  
+  const loginMutation = useLoginMutation(queryClient);
+  const registerMutation = useRegisterMutation(queryClient);
+  const logoutMutation = useLogoutMutation(queryClient);
+  
   const contextValue: AuthContextType = {
     user: user || null,
     isLoading,
-    error,
+    error: error as Error | null,
     isAuthenticated: !!user,
     loginMutation,
-    logoutMutation,
     registerMutation,
+    logoutMutation,
   };
-
-  // Return the provider component
+  
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
@@ -145,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// Hook to use auth context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
