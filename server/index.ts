@@ -1,6 +1,5 @@
 import express, { NextFunction, Request, Response } from "express";
 import { registerRoutes } from "./routes";
-import path from "path";
 import bodyParser from "body-parser";
 import { log, setupVite, serveStatic } from "./vite";
 
@@ -8,23 +7,26 @@ async function main() {
   // Create Express server
   const app = express();
   
-  // Parse JSON bodies
-  app.use(bodyParser.json());
-  
-  // Log all requests
-  app.use((req, _res, next) => {
-    log(`${req.method} ${req.path}`);
+  // Enable detailed error logging
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      log(`${req.method} ${req.path} ${res.statusCode}`);
+    });
     next();
   });
+  
+  // Parse JSON bodies
+  app.use(bodyParser.json());
   
   // Register API routes
   const server = await registerRoutes(app);
   
   // Handle errors
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error(err);
+    console.error("Server Error:", err);
     res.status(500).json({
-      message: err.message || "Something went wrong",
+      message: err.message || "Internal Server Error",
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   });
   
@@ -42,6 +44,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error("Server startup error:", err);
   process.exit(1);
 });

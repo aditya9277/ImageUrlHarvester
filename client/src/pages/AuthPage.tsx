@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { AuthForm } from "@/components/AuthForm";
+import { SimpleAuthForm } from "@/components/SimpleAuthForm";
 import { useAuth } from "@/hooks/useAuth";
-import { Redirect } from "wouter";
-import { ImageIcon } from "lucide-react";
+import { Redirect, Link } from "wouter";
+import { ArrowLeft, ImageIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -30,12 +31,20 @@ export default function AuthPage() {
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="bg-primary text-white p-2 rounded-lg">
-              <ImageIcon size={20} />
+          <Link href="/">
+            <div className="flex items-center space-x-2 cursor-pointer">
+              <div className="bg-primary text-white p-2 rounded-lg">
+                <ImageIcon size={20} />
+              </div>
+              <h1 className="text-xl font-semibold text-gray-800">ImageScraper</h1>
             </div>
-            <h1 className="text-xl font-semibold text-gray-800">ImageScraper</h1>
-          </div>
+          </Link>
+          <Link href="/">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+          </Link>
         </div>
       </header>
       
@@ -43,7 +52,7 @@ export default function AuthPage() {
         {/* Auth Form Section */}
         <div className="w-full md:w-1/2 p-8 flex items-center justify-center">
           <div className="w-full max-w-md">
-            <AuthForm
+            <SimpleAuthForm
               mode={mode}
               onSubmit={handleSubmit}
               isLoading={mode === "login" ? loginMutation.isPending : registerMutation.isPending}
