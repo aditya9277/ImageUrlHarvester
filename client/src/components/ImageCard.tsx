@@ -1,5 +1,7 @@
-import { getDomainFromUrl } from "@/lib/utils";
-import { DownloadIcon, ExternalLinkIcon } from "lucide-react";
+import { formatBytes, getDomainFromUrl } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { DownloadIcon, ExternalLinkIcon, CheckCircleIcon, Loader2Icon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface ImageData {
   url: string;
@@ -8,6 +10,8 @@ export interface ImageData {
   height?: number;
   alt?: string;
   fileSize?: number;
+  hash?: string;
+  cached?: boolean;
 }
 
 interface ImageCardProps {
@@ -20,6 +24,7 @@ export function ImageCard({ image }: ImageCardProps) {
   const dimensions = image.width && image.height 
     ? `${image.width}×${image.height}` 
     : "Unknown dimensions";
+  const size = image.fileSize ? formatBytes(image.fileSize) : null;
 
   const handleDownload = () => {
     const link = document.createElement('a');
@@ -43,8 +48,27 @@ export function ImageCard({ image }: ImageCardProps) {
         />
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent text-white p-3">
           <div className="text-sm font-medium truncate">{title}</div>
-          <div className="text-xs opacity-75">{dimensions} • {domain}</div>
+          <div className="text-xs opacity-75">
+            {dimensions}{size ? ` • ${size}` : ""} • {domain}
+          </div>
         </div>
+        {image.cached && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute top-2 right-2">
+                  <Badge variant="outline" className="bg-white/90 text-xs px-2 py-0 flex items-center gap-1">
+                    <CheckCircleIcon size={12} className="text-green-500" />
+                    <span>Cached</span>
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">This image was loaded from cache for faster performance</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </a>
       <div className="px-3 py-2 flex justify-between items-center border-t border-gray-100">
         <span className="text-xs text-gray-500 truncate max-w-[180px]">{domain}</span>

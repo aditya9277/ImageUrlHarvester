@@ -7,6 +7,9 @@ import Home from "@/pages/Home";
 import NotFound from "@/pages/not-found";
 import { NotificationProvider } from "@/hooks/use-notification";
 
+import { Suspense } from "react";
+import { LoadingState } from "@/components/LoadingState";
+
 function Router() {
   return (
     <Switch>

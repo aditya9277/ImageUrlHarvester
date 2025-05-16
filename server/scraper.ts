@@ -185,12 +185,18 @@ function deduplicateImages(images: ImageData[]): ImageData[] {
   const uniqueImages: ImageData[] = [];
   
   for (const image of images) {
-    // Create a simple hash of the URL
+    // Create a simple hash of the URL to use as a check for duplicates
     const urlHash = crypto.createHash("md5").update(image.url).digest("hex");
+    
+    // Store the hash with the image data for future caching
+    const imageWithHash: ImageData = {
+      ...image,
+      hash: urlHash
+    };
     
     if (!uniqueUrls.has(urlHash)) {
       uniqueUrls.add(urlHash);
-      uniqueImages.push(image);
+      uniqueImages.push(imageWithHash);
     }
   }
   
